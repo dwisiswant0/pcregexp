@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 
 	"github.com/dwisiswant0/pcregexp"
 )
@@ -39,17 +40,45 @@ func (r *Regexp) IsPCRE() bool {
 // needsPCRE checks if the pattern contains features that require PCRE.
 func needsPCRE(pattern string) bool {
 	lookarounds := []string{
-		"(?=", "(?!", // Positive/negative lookahead
-		"(?<=", "(?<!", // Positive/negative lookbehind
+		"(?=", "(?!", // Positive and negative lookahead.
+		"(?<=", "(?<!", // Positive and negative lookbehind.
 	}
-	for _, l := range lookarounds {
-		if contains(pattern, l) {
+
+	unsupportedTokens := []string{
+		`\X`,         // Unicode grapheme
+		`\h`,         // horizontal whitespace
+		`\H`,         // not horizontal whitespace
+		`\V`,         // not vertical whitespace
+		`\R`,         // line break
+		`\N`,         // not line break
+		`\Z`,         // end of string
+		`\G`,         // previous match end
+		`\K`,         // keep out
+		`\c`,         // control character escape (e.g. \cI)
+		`\e`,         // escape character
+		"(?>",        // atomic group
+		"(?|",        // branch reset group
+		"(?(DEFINE)", // define group
+		"(?(",        // conditional group (matches conditionals, but not non-capturing which is "(?:")
+		"(?#",        // comment
+		"(?R)",       // recursion
+	}
+
+	// Check for lookahead and lookbehind assertions.
+	for _, token := range lookarounds {
+		if strings.Contains(pattern, token) {
 			return true
 		}
 	}
 
-	// Check for backreferences using simple string matching
-	// First look for capturing groups by counting unescaped parentheses
+	// Check for unsupported tokens.
+	for _, token := range unsupportedTokens {
+		if strings.Contains(pattern, token) {
+			return true
+		}
+	}
+
+	// Check for backreferences using simple string matching.
 	groups := 0
 	escaped := false
 	for i := 0; i < len(pattern); i++ {
@@ -58,7 +87,7 @@ func needsPCRE(pattern string) bool {
 			continue
 		}
 		if !escaped && pattern[i] == '(' {
-			// Skip named and non-capturing groups
+			// Skip non-capturing groups and named groups.
 			if i+2 < len(pattern) && pattern[i+1] == '?' {
 				if pattern[i+2] == ':' || pattern[i+2] == 'P' {
 					continue
@@ -69,13 +98,12 @@ func needsPCRE(pattern string) bool {
 		escaped = false
 	}
 
-	// Look for backreferences if we have any groups
+	// If we have any capturing groups, look for backreferences.
 	if groups > 0 {
 		escaped = false
 		for i := 0; i < len(pattern); i++ {
 			if pattern[i] == '\\' {
 				if !escaped && i+1 < len(pattern) {
-					// Check if next char is a digit 1-9
 					next := pattern[i+1]
 					if next >= '1' && next <= '9' {
 						return true
@@ -88,32 +116,6 @@ func needsPCRE(pattern string) bool {
 		}
 	}
 
-	return false
-}
-
-// contains reports whether substr is within s.
-func contains(s, substr string) bool {
-	// Simple string search that handles escaping
-	escaped := false
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i] == '\\' {
-			escaped = !escaped
-			continue
-		}
-		if !escaped {
-			match := true
-			for j := 0; j < len(substr); j++ {
-				if s[i+j] != substr[j] {
-					match = false
-					break
-				}
-			}
-			if match {
-				return true
-			}
-		}
-		escaped = false
-	}
 	return false
 }
 
