@@ -1,6 +1,9 @@
 package regexp
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"testing"
 )
 
@@ -41,6 +44,30 @@ func TestCompile(t *testing.T) {
 			wantErr: false,
 			isPCRE:  true,
 		},
+		{
+			name:    "unicode grapheme",
+			pattern: "a\\Xb",
+			wantErr: false,
+			isPCRE:  true,
+		},
+		{
+			name:    "horizontal whitespace",
+			pattern: "a\\hb",
+			wantErr: false,
+			isPCRE:  true,
+		},
+		{
+			name:    "atomic group",
+			pattern: "(?>abc)",
+			wantErr: false,
+			isPCRE:  true,
+		},
+		{
+			name:    "recursion",
+			pattern: "(?R)",
+			wantErr: false,
+			isPCRE:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -53,8 +80,45 @@ func TestCompile(t *testing.T) {
 			if err != nil {
 				return
 			}
-			if (re.IsPCRE()) != tt.isPCRE {
+			if re.IsPCRE() != tt.isPCRE {
 				t.Errorf("Compile() isPCRE = %v, want %v", re.IsPCRE(), tt.isPCRE)
+			}
+		})
+	}
+}
+
+func TestCompile_CommonWebAttacks(t *testing.T) {
+	url := "https://github.com/teler-sh/teler-resources/raw/refs/heads/master/db/common-web-attacks.json"
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("Failed to fetch JSON from %q: %v", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Unexpected HTTP status: %s", resp.Status)
+	}
+
+	var data struct {
+		Filters []struct {
+			ID          int      `json:"id"`
+			Rule        string   `json:"rule"`
+			Description string   `json:"description"`
+			Tags        []string `json:"tags"`
+			Impact      int      `json:"impact"`
+		} `json:"filters"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		t.Fatalf("Failed to decode JSON: %v", err)
+	}
+
+	for _, filter := range data.Filters {
+		t.Run(fmt.Sprintf("ID-%d", filter.ID), func(t *testing.T) {
+			_, err := Compile(filter.Rule)
+			if err != nil {
+				t.Errorf("Failed to compile rule %q: %v", filter.Rule, err)
+				return
 			}
 		})
 	}
