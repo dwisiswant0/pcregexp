@@ -144,6 +144,39 @@ func MustCompile(pattern string) *Regexp {
 	return re
 }
 
+// Match reports whether the byte slice b
+// contains any match of the regular expression pattern.
+// More complicated queries need to use [Compile] and the full [Regexp] interface.
+func Match(pattern string, b []byte) (matched bool, err error) {
+	re, err := Compile(pattern)
+	if err != nil {
+		return false, err
+	}
+	return re.Match(b), nil
+}
+
+// MatchReader reports whether the text returned by the [io.RuneReader]
+// contains any match of the regular expression pattern.
+// More complicated queries need to use [Compile] and the full [Regexp] interface.
+func MatchReader(pattern string, r io.RuneReader) (matched bool, err error) {
+	re, err := Compile(pattern)
+	if err != nil {
+		return false, err
+	}
+	return re.MatchReader(r), nil
+}
+
+// MatchString reports whether the string s
+// contains any match of the regular expression pattern.
+// More complicated queries need to use [Compile] and the full [Regexp] interface.
+func MatchString(pattern string, s string) (matched bool, err error) {
+	re, err := Compile(pattern)
+	if err != nil {
+		return false, err
+	}
+	return re.MatchString(s), nil
+}
+
 // Close releases any resources used by the [pcregexp.PCREgexp].
 func (r *Regexp) Close() {
 	if r.pcregexp != nil {
