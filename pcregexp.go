@@ -57,19 +57,21 @@ type PCREgexp struct {
 }
 
 // Compile creates a new PCREgexp from pattern.
+//
+// Note: an empty pattern is considered valid but will match nothing. :shrug:
+// In this case, calling [Close] is unnecessary.
 func Compile(pattern string) (*PCREgexp, error) {
 	var patPtr *uint8
 	var errcode int32
 	var errOffset uint64
 
 	if len(pattern) == 0 {
-		var dummy byte = 0
-		patPtr = &dummy
-	} else {
-		strHeader := (*reflect.StringHeader)(unsafe.Pointer(&pattern))
-		patPtr = (*uint8)(unsafe.Pointer(strHeader.Data))
-		// patPtr = (*uint8)(unsafe.StringData(pattern))
+		return &PCREgexp{code: 0, pattern: pattern}, nil
 	}
+
+	strHeader := (*reflect.StringHeader)(unsafe.Pointer(&pattern))
+	patPtr = (*uint8)(unsafe.Pointer(strHeader.Data))
+	// patPtr = (*uint8)(unsafe.StringData(pattern))
 
 	code := pcre2_compile(patPtr, uint64(len(pattern)), 0, &errcode, &errOffset, 0)
 	if code == 0 {
@@ -80,6 +82,9 @@ func Compile(pattern string) (*PCREgexp, error) {
 }
 
 // MustCompile is like [Compile] but panics on error.
+//
+// Note: an empty pattern is considered valid but will match nothing. :shrug:
+// In this case, calling [Close] is unnecessary.
 func MustCompile(pattern string) *PCREgexp {
 	re, err := Compile(pattern)
 	if err != nil {
@@ -92,6 +97,8 @@ func MustCompile(pattern string) *PCREgexp {
 // Match reports whether the byte slice b
 // contains any match of the regular expression pattern.
 // More complicated queries need to use [Compile] and the full [Regexp] interface.
+//
+// Note: an empty pattern is considered valid but will match nothing. :shrug:
 func Match(pattern string, b []byte) (matched bool, err error) {
 	re, err := Compile(pattern)
 	if err != nil {
@@ -104,6 +111,8 @@ func Match(pattern string, b []byte) (matched bool, err error) {
 // MatchReader reports whether the text returned by the [io.RuneReader]
 // contains any match of the regular expression pattern.
 // More complicated queries need to use [Compile] and the full [Regexp] interface.
+//
+// Note: an empty pattern is considered valid but will match nothing. :shrug:
 func MatchReader(pattern string, r io.RuneReader) (matched bool, err error) {
 	re, err := Compile(pattern)
 	if err != nil {
@@ -116,6 +125,8 @@ func MatchReader(pattern string, r io.RuneReader) (matched bool, err error) {
 // MatchString reports whether the string s
 // contains any match of the regular expression pattern.
 // More complicated queries need to use [Compile] and the full [Regexp] interface.
+//
+// Note: an empty pattern is considered valid but will match nothing. :shrug:
 func MatchString(pattern string, s string) (matched bool, err error) {
 	re, err := Compile(pattern)
 	if err != nil {
