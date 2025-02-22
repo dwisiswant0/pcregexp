@@ -56,7 +56,7 @@ type PCREgexp struct {
 	matchData uintptr // cached match data
 }
 
-// Compile compiles the given pattern and returns a [PCREgexp].
+// Compile creates a new PCREgexp from pattern.
 func Compile(pattern string) (*PCREgexp, error) {
 	var patPtr *uint8
 	var errcode int32
@@ -79,7 +79,7 @@ func Compile(pattern string) (*PCREgexp, error) {
 	return &PCREgexp{code: code, pattern: pattern}, nil
 }
 
-// MustCompile is like Compile but panics on error.
+// MustCompile is like [Compile] but panics on error.
 func MustCompile(pattern string) *PCREgexp {
 	re, err := Compile(pattern)
 	if err != nil {
@@ -87,6 +87,42 @@ func MustCompile(pattern string) *PCREgexp {
 	}
 
 	return re
+}
+
+// Match reports whether the byte slice b
+// contains any match of the regular expression pattern.
+// More complicated queries need to use [Compile] and the full [Regexp] interface.
+func Match(pattern string, b []byte) (matched bool, err error) {
+	re, err := Compile(pattern)
+	if err != nil {
+		return false, err
+	}
+	defer re.Close()
+	return re.Match(b), nil
+}
+
+// MatchReader reports whether the text returned by the [io.RuneReader]
+// contains any match of the regular expression pattern.
+// More complicated queries need to use [Compile] and the full [Regexp] interface.
+func MatchReader(pattern string, r io.RuneReader) (matched bool, err error) {
+	re, err := Compile(pattern)
+	if err != nil {
+		return false, err
+	}
+	defer re.Close()
+	return re.MatchReader(r), nil
+}
+
+// MatchString reports whether the string s
+// contains any match of the regular expression pattern.
+// More complicated queries need to use [Compile] and the full [Regexp] interface.
+func MatchString(pattern string, s string) (matched bool, err error) {
+	re, err := Compile(pattern)
+	if err != nil {
+		return false, err
+	}
+	defer re.Close()
+	return re.MatchString(s), nil
 }
 
 // Close frees the resources associated with the compiled pattern.

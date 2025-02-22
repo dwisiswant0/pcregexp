@@ -36,6 +36,58 @@ func TestCompile(t *testing.T) {
 	}
 }
 
+func TestTopLevelMatch(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		input   string
+		want    bool
+		wantErr bool
+	}{
+		{"valid pattern with match", `p([a-z]+)ch`, "peach", true, false},
+		{"valid pattern no match", `p([a-z]+)ch`, "apple", false, false},
+		{"empty pattern", "", "", false, false},
+		{"invalid pattern", "[", "test", false, true},
+		{"complex pattern", `\b\w+@\w+\.\w+\b`, "test@example.com", true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name+" (Match)", func(t *testing.T) {
+			got, err := pcregexp.Match(tt.pattern, []byte(tt.input))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Match() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err == nil && got != tt.want {
+				t.Errorf("Match() = %v, want %v", got, tt.want)
+			}
+		})
+
+		t.Run(tt.name+" (MatchReader)", func(t *testing.T) {
+			reader := strings.NewReader(tt.input)
+			got, err := pcregexp.MatchReader(tt.pattern, reader)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MatchReader() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err == nil && got != tt.want {
+				t.Errorf("MatchReader() = %v, want %v", got, tt.want)
+			}
+		})
+
+		t.Run(tt.name+" (MatchString)", func(t *testing.T) {
+			got, err := pcregexp.MatchString(tt.pattern, tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MatchString() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err == nil && got != tt.want {
+				t.Errorf("MatchString() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRegexp_Methods(t *testing.T) {
 	re := pcregexp.MustCompile(`p([a-z]+)ch`)
 	defer re.Close()
