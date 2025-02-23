@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dwisiswant0/pcregexp"
 )
@@ -606,4 +607,62 @@ func TestRegexp_RuneReaderMethods(t *testing.T) {
 			t.Errorf("FindReaderSubmatchIndex(%q) = %v, want %v", input, got, want)
 		}
 	})
+}
+
+func TestReDoS(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		input   string
+		timeout time.Duration
+	}{
+		{
+			name:    "catastrophic backtracking",
+			pattern: `(a+)+b`,
+			input:   strings.Repeat("a", 31337) + "!",
+			timeout: time.Second,
+		},
+		{
+			name:    "nested quantifiers",
+			pattern: `([a-z]+)*`,
+			input:   strings.Repeat("a", 31337),
+			timeout: time.Second,
+		},
+		{
+			name:    "overlapping patterns",
+			pattern: `(a|a?)+`,
+			input:   strings.Repeat("a", 31337) + "b",
+			timeout: time.Second,
+		},
+		{
+			name:    "evil repetitions",
+			pattern: `(a?){25}a{25}`,
+			input:   strings.Repeat("a", 31337),
+			timeout: time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			re, err := pcregexp.Compile(tt.pattern)
+			if err != nil {
+				t.Fatalf("Failed to compile pattern: %v", err)
+			}
+			defer re.Close()
+
+			done := make(chan bool)
+			go func() {
+				re.MatchString(tt.input)
+				done <- true
+			}()
+
+			select {
+			case <-done:
+				// Test completed before timeout
+			case <-time.After(tt.timeout):
+				t.Errorf("Pattern '%s' with input '%s' took longer than %v - possible ReDoS vulnerability",
+					tt.pattern, tt.input, tt.timeout)
+			}
+		})
+	}
 }
