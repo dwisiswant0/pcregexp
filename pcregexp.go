@@ -42,13 +42,28 @@ func init() {
 		{&pcre2_match_data_create_from_pattern, "pcre2_match_data_create_from_pattern_8"},
 		{&pcre2_match_data_free, "pcre2_match_data_free_8"},
 		{&pcre2_get_ovector_pointer, "pcre2_get_ovector_pointer_8"},
+		// Match context functions
+		{&pcre2_match_context_create, "pcre2_match_context_create_8"},
+		{&pcre2_match_context_free, "pcre2_match_context_free_8"},
+		// {&pcre2_set_offset_limit, "pcre2_set_offset_limit_8"},
+		// {&pcre2_set_heap_limit, "pcre2_set_heap_limit_8"},
+		{&pcre2_set_match_limit, "pcre2_set_match_limit_8"},
+		{&pcre2_set_recursion_limit, "pcre2_set_recursion_limit_8"},
 	}
 
 	for _, f := range funcs {
 		purego.RegisterLibFunc(f[0], lib, f[1].(string))
 	}
+
+	runtime.SetFinalizer(globalFinalizerObject, func(_ *int) {
+		if defaultMatchCtx != nil {
+			pcre2_match_context_free(defaultMatchCtx.ptr)
+			defaultMatchCtx = nil
+		}
+	})
 }
 
+// PCREgexp is a compiled regular expression.
 type PCREgexp struct {
 	pattern   string  // original pattern
 	buf       []int   // cached match offsets
@@ -180,7 +195,13 @@ func (re *PCREgexp) match(subject []byte) []int {
 		subjectPtr = (*uint8)(ptr(&subject[0]))
 	}
 
-	ret := pcre2_match(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, 0)
+	// Use the default match context if available
+	var matchCtxPtr uintptr
+	if defaultMatchCtx != nil {
+		matchCtxPtr = defaultMatchCtx.ptr
+	}
+
+	ret := pcre2_match(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
 	if ret < 0 {
 		return nil
 	}

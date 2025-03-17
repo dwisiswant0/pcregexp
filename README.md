@@ -6,7 +6,7 @@
 `pcregexp` is a drop‑in replacement for Go's standard [`regexp`](https://pkg.go.dev/regexp) package that uses the full capabilities of [PCRE2](https://github.com/PCRE2Project/pcre2) by loading the shared library dynamically at runtime, which enables cross‑compilation without the need for a C compiler (**no Cgo required!**). The API closely mirrors that of the standard library's `regexp` package while supporting advanced regex features like lookarounds and backreferences that PCRE2 provides.
 
 > [!WARNING]
-> PCRE2 supports features that can lead to exponential runtime in some cases. Use `pcregexp` only with *trusted* regex patterns to avoid potential regular expression denial-of-service (ReDoS) issues ([CWE-1333](https://cwe.mitre.org/data/definitions/1333.html)).
+> PCRE2 supports features that can lead to exponential runtime in some cases. Use `pcregexp` only with *trusted* regex patterns to avoid potential regular expression denial-of-service (ReDoS) issues ([CWE-1333](https://cwe.mitre.org/data/definitions/1333.html)) or configure a global match context to impose limits and control resource usage by using [`SetMatchContext`](https://pkg.go.dev/github.com/dwisiswant0/pcregexp#SetMatchContext) function.
 
 ## Requirements
 
@@ -73,16 +73,7 @@ make bench
 
 ## TODO
 
-* [ ] Implement PCRE2 JIT compilation support
-  * Use native PCRE2 API JIT functions for improved performance
-  * Add JIT compilation options and configurations
-  * Implement memory management for JIT-compiled patterns
-* [ ] Implement these methods:
-  * [ ] `NumSubexp`
-  * [ ] `LiteralPrefix`
-  * [ ] `Longest`
-  * [ ] `SubexpNames`
-  * [ ] `SubexpIndex`
+See [TODO.md](/TODO.md).
 
 ## Status
 
