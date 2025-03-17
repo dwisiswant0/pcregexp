@@ -18,7 +18,7 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
-          # - windows-latest
+          - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -70,12 +70,12 @@ jobs:
         if: runner.os == 'Linux' || runner.os == 'macOS'
         working-directory: ${{ steps.download_pcre2.outputs.result }}
         run: |
-          cmake -B build .
+          cmake -B build -DBUILD_SHARED_LIBS=ON .
           cmake --build build/
           if [[ $RUNNER_OS == 'Linux' ]]; then
-            echo "LD_LIBRARY_PATH=$PCRE2_PATH/build:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+            echo "LD_LIBRARY_PATH=$(pwd)/build:$LD_LIBRARY_PATH" >> $GITHUB_ENV
           elif [[ $RUNNER_OS == 'macOS' ]]; then
-            echo "DYLD_LIBRARY_PATH=$PCRE2_PATH/build:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+            echo "DYLD_LIBRARY_PATH=$(pwd)/build:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
           fi
 
       - name: Build PCRE2 on Windows
@@ -84,10 +84,11 @@ jobs:
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
-          cmake -B build .
-          cmake --build build/
-          $env:PATH = "$(Get-Location)\build;" + $env:PATH
-          Write-Output "PATH=$(Get-Location)\build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
+          cmake -B build -DBUILD_SHARED_LIBS=ON .
+          cmake --build build/ --config Release
+          $buildPath = Resolve-Path ".\build\Release"
+          $env:PATH = "$buildPath;" + $env:PATH
+          Write-Output "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - uses: actions/setup-go@v5
         with:
@@ -95,4 +96,6 @@ jobs:
           cache: true
 
       - name: Run Tests
-        run: CGO_ENABLED=0 go test -v .
+        run: go test -v .
+        env:
+          CGO_ENABLED: "0"
