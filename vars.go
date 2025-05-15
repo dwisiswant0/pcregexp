@@ -68,13 +68,18 @@ var (
 	//        uint32_t value);
 	pcre2_set_match_limit func(matchContext uintptr, value uint32) int32
 
-	// pcre2_set_recursion_limit_8:
-	//    int pcre2_set_recursion_limit_8(pcre2_match_context *mcontext,
-	//    uint32_t value);
-	//
-	// NOTE(dwisiswant0): This function is became obsolete at PCRE2 10.30.
-	// See: https://pcre2project.github.io/pcre2/doc/pcre2api/#:~:text=PCRE2%20NATIVE%20API%20OBSOLETE%20FUNCTIONS
-	pcre2_set_recursion_limit func(matchContext uintptr, value uint32) int32
+	// // pcre2_set_recursion_limit_8:
+	// //    int pcre2_set_recursion_limit_8(pcre2_match_context *mcontext,
+	// //    uint32_t value);
+	// //
+	// // NOTE(dwisiswant0): This function is became obsolete at PCRE2 10.30.
+	// // See: https://pcre2project.github.io/pcre2/doc/pcre2api/#:~:text=PCRE2%20NATIVE%20API%20OBSOLETE%20FUNCTIONS
+	// pcre2_set_recursion_limit func(matchContext uintptr, value uint32) int32
+
+	// pcre2_set_depth_limit_8:
+	//    int pcre2_set_depth_limit_8(pcre2_match_context *mcontext,
+	//        uint32_t value);
+	pcre2_set_depth_limit func(matchContext uintptr, value uint32) int32
 
 	// pcre2_jit_compile:
 	//    int pcre2_jit_compile_8(pcre2_code *code, uint32_t options);

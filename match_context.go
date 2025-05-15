@@ -15,8 +15,8 @@ type MatchContext struct {
 	// MatchLimit is the maximum number of matches to allow.
 	MatchLimit uint32
 
-	// RecursionLimit is the maximum recursion depth to allow.
-	RecursionLimit uint32
+	// DepthLimit is the maximum recursion depth to allow.
+	DepthLimit uint32
 
 	// ptr is the internal match context pointer.
 	ptr uintptr
@@ -36,7 +36,7 @@ func SetMatchContext(ctx MatchContext) error {
 		defaultMatchCtx = nil
 	}
 
-	if ctx.MatchLimit == 0 && ctx.RecursionLimit == 0 {
+	if ctx.MatchLimit == 0 && ctx.DepthLimit == 0 {
 		return nil
 	}
 
@@ -52,8 +52,8 @@ func SetMatchContext(ctx MatchContext) error {
 		}
 	}
 
-	if ctx.RecursionLimit > 0 {
-		if result := pcre2_set_recursion_limit(ctx.ptr, ctx.RecursionLimit); result != 0 {
+	if ctx.DepthLimit > 0 {
+		if result := pcre2_set_depth_limit(ctx.ptr, ctx.DepthLimit); result != 0 {
 			pcre2_match_context_free(ctx.ptr)
 			return fmt.Errorf("could not set recursion limit, error code: %d", result)
 		}
