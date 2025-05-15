@@ -1,5 +1,12 @@
 package pcregexp
 
+// matchFunc is a function type that defines the signature for the PCRE2 match
+// function.
+//
+// The arguments for pcre2_jit_match() are exactly the same as for pcre2_match().
+// Ref: https://pcre2project.github.io/pcre2/doc/pcre2_jit_match/
+type matchFunc func(code uintptr, subject *uint8, length uint64, startoffset uint64, options uint32, matchData uintptr, matchContext uintptr) int32
+
 var (
 	// globalFinalizerObject is used to attach a finalizer for cleanup
 	globalFinalizerObject = new(int)
@@ -21,7 +28,7 @@ var (
 	//    PCRE2_SPTR subject, PCRE2_SIZE length, PCRE2_SIZE startoffset,
 	//	  uint32_t options, pcre2_match_data *match_data,
 	// 	  pcre2_match_context *mcontext);
-	pcre2_match func(code uintptr, subject *uint8, length uint64, startoffset uint64, options uint32, matchData uintptr, matchContext uintptr) int32
+	pcre2_match matchFunc
 
 	// pcre2_match_data_create_from_pattern_8:
 	// 	  pcre2_match_data *pcre2_match_data_create_from_pattern_8(
@@ -68,4 +75,28 @@ var (
 	// NOTE(dwisiswant0): This function is became obsolete at PCRE2 10.30.
 	// See: https://pcre2project.github.io/pcre2/doc/pcre2api/#:~:text=PCRE2%20NATIVE%20API%20OBSOLETE%20FUNCTIONS
 	pcre2_set_recursion_limit func(matchContext uintptr, value uint32) int32
+
+	// pcre2_jit_compile:
+	//    int pcre2_jit_compile_8(pcre2_code *code, uint32_t options);
+	pcre2_jit_compile func(code uintptr, options uint32) int32
+
+	// pcre2_match_8: int pcre2_match_8(const pcre2_code *code,
+	//    PCRE2_SPTR subject, PCRE2_SIZE length, PCRE2_SIZE startoffset,
+	//	  uint32_t options, pcre2_match_data *match_data,
+	// 	  pcre2_match_context *mcontext);
+	pcre2_jit_match matchFunc
+
+	// pcre2_jit_stack_create:
+	//    pcre2_jit_stack *pcre2_jit_stack_create_8(PCRE2_SIZE startsize,
+	//        PCRE2_SIZE maxsize, pcre2_general_context *gcontext);
+	pcre2_jit_stack_create func(startsize uint64, maxsize uint64, generalContext uintptr) uintptr
+
+	// pcre2_jit_stack_free:
+	//    void pcre2_jit_stack_free_8(pcre2_jit_stack *stack);
+	pcre2_jit_stack_free func(stack uintptr)
+
+	// pcre2_jit_stack_assign:
+	//    int pcre2_jit_stack_assign_8(pcre2_match_context *mcontext,
+	//        pcre2_jit_callback callback, void *callback_data)
+	pcre2_jit_stack_assign func(matchContext uintptr, callback uintptr, data uintptr) int32
 )

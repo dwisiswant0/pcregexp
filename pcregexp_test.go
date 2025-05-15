@@ -234,6 +234,45 @@ func TestBackreferences(t *testing.T) {
 	}
 }
 
+func TestEdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		text    string
+		want    bool
+	}{
+		{
+			name:    "empty pattern",
+			pattern: "",
+			text:    "any text",
+			want:    false,
+		},
+		{
+			name:    "very long pattern",
+			pattern: `a` + `[a-z]` + `{1000}` + `z`,
+			text:    "a" + "b" + "z",
+			want:    false,
+		},
+		{
+			name:    "pattern with unicode",
+			pattern: `\p{L}+`,
+			text:    "hello世界",
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			re := pcregexp.MustCompile(tt.pattern)
+			defer re.Close()
+
+			if got := re.MatchString(tt.text); got != tt.want {
+				t.Errorf("MatchString() with pattern %q = %v, want %v", tt.pattern, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRegexp_ByteMethods(t *testing.T) {
 	re := pcregexp.MustCompile(`p([a-z]+)ch`)
 	defer re.Close()
