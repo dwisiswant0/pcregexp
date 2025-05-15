@@ -54,7 +54,7 @@ func init() {
 		// {&pcre2_set_offset_limit, "pcre2_set_offset_limit_8"},
 		// {&pcre2_set_heap_limit, "pcre2_set_heap_limit_8"},
 		{&pcre2_set_match_limit, "pcre2_set_match_limit_8"},
-		{&pcre2_set_recursion_limit, "pcre2_set_recursion_limit_8"},
+		{&pcre2_set_depth_limit, "pcre2_set_depth_limit_8"},
 	}
 
 	for _, f := range funcs {

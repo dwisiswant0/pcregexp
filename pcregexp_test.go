@@ -682,8 +682,8 @@ func TestReDoS(t *testing.T) {
 	}
 
 	pcregexp.SetMatchContext(pcregexp.MatchContext{
-		MatchLimit:     1000000,
-		RecursionLimit: 1000000,
+		MatchLimit: 1000000,
+		DepthLimit: 1000000,
 	})
 
 	for _, tt := range tests {
