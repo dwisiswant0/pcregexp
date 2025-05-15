@@ -42,6 +42,12 @@ func init() {
 		{&pcre2_match_data_create_from_pattern, "pcre2_match_data_create_from_pattern_8"},
 		{&pcre2_match_data_free, "pcre2_match_data_free_8"},
 		{&pcre2_get_ovector_pointer, "pcre2_get_ovector_pointer_8"},
+		// JIT-related functions
+		{&pcre2_jit_compile, "pcre2_jit_compile_8"},
+		{&pcre2_jit_match, "pcre2_jit_match_8"},
+		{&pcre2_jit_stack_create, "pcre2_jit_stack_create_8"},
+		{&pcre2_jit_stack_free, "pcre2_jit_stack_free_8"},
+		{&pcre2_jit_stack_assign, "pcre2_jit_stack_assign_8"},
 		// Match context functions
 		{&pcre2_match_context_create, "pcre2_match_context_create_8"},
 		{&pcre2_match_context_free, "pcre2_match_context_free_8"},
@@ -69,6 +75,8 @@ type PCREgexp struct {
 	buf       []int   // cached match offsets
 	code      uintptr // pointer to compiled pcre2_code
 	matchData uintptr // cached match data
+	isJIT     bool    // whether pattern has been JIT compiled
+	jitStack  uintptr // pointer to JIT stack
 }
 
 // Compile creates a new PCREgexp from pattern.
@@ -88,12 +96,27 @@ func Compile(pattern string) (*PCREgexp, error) {
 	patPtr = (*uint8)(unsafe.Pointer(strHeader.Data))
 	// patPtr = (*uint8)(unsafe.StringData(pattern))
 
+	// PCRE2_UTF = 0x00080000
+	// PCRE2_NO_UTF_CHECK = 0x40000000
 	code := pcre2_compile(patPtr, uint64(len(pattern)), 0, &errcode, &errOffset, 0)
 	if code == 0 {
 		return nil, fmt.Errorf("pcre2_compile failed at offset %d, error code %d", errOffset, errcode)
 	}
 
-	return &PCREgexp{code: code, pattern: pattern}, nil
+	re := &PCREgexp{code: code, pattern: pattern}
+
+	if defaultJITOption != JITNoJit {
+		res := pcre2_jit_compile(code, uint32(defaultJITOption))
+		if res == 0 {
+			re.isJIT = true
+			re.jitStack = pcre2_jit_stack_create(defaultJITStackStartSize, defaultJITStackMaxSize, 0)
+			if re.jitStack != 0 && defaultMatchCtx != nil {
+				pcre2_jit_stack_assign(defaultMatchCtx.ptr, 0, re.jitStack)
+			}
+		}
+	}
+
+	return re, nil
 }
 
 // MustCompile is like [Compile] but panics on error.
@@ -158,6 +181,11 @@ func (re *PCREgexp) Close() {
 		re.matchData = 0
 	}
 
+	if re.jitStack != 0 {
+		pcre2_jit_stack_free(re.jitStack)
+		re.jitStack = 0
+	}
+
 	if re.code != 0 {
 		pcre2_code_free(re.code)
 		re.code = 0
@@ -201,7 +229,20 @@ func (re *PCREgexp) match(subject []byte) []int {
 		matchCtxPtr = defaultMatchCtx.ptr
 	}
 
-	ret := pcre2_match(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
+	matchFunc := pcre2_match
+	if re.isJIT {
+		matchFunc = pcre2_jit_match
+	}
+
+	var ret int32
+
+	ret = matchFunc(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
+
+	// If JIT was used and failed, fall back to non-JIT match
+	if re.isJIT && ret <= 0 {
+		ret = pcre2_match(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
+	}
+
 	if ret < 0 {
 		return nil
 	}
@@ -237,7 +278,7 @@ func (re *PCREgexp) MatchString(s string) bool {
 // FindString returns the text of the leftmost match in s.
 func (re *PCREgexp) FindString(s string) string {
 	indexes := re.match(stringToBytesUnsafe(s))
-	if indexes == nil || len(indexes) < 2 {
+	if len(indexes) < 2 {
 		return ""
 	}
 
@@ -255,7 +296,7 @@ func (re *PCREgexp) FindStringIndex(s string) []int {
 // PCRE2.
 func (re *PCREgexp) FindStringSubmatch(s string) []string {
 	indexes := re.match(stringToBytesUnsafe(s))
-	if indexes == nil || len(indexes) < 2 {
+	if len(indexes) < 2 {
 		return nil
 	}
 
@@ -291,7 +332,7 @@ func (re *PCREgexp) ReplaceAllString(src, repl string) string {
 	remaining := src
 	for {
 		indexes := re.match(stringToBytesUnsafe(remaining))
-		if indexes == nil || len(indexes) < 2 || indexes[0] < 0 {
+		if len(indexes) < 2 {
 			b.WriteString(remaining)
 			break
 		}
@@ -323,7 +364,7 @@ func (re *PCREgexp) ReplaceAllString(src, repl string) string {
 // Find returns a slice holding the text of the leftmost match in b.
 func (re *PCREgexp) Find(b []byte) []byte {
 	indexes := re.match(b)
-	if indexes == nil || len(indexes) < 2 {
+	if len(indexes) < 2 {
 		return nil
 	}
 	result := make([]byte, indexes[1]-indexes[0])
@@ -346,7 +387,7 @@ func (re *PCREgexp) FindIndex(b []byte) []int {
 // match and the matches of any subexpressions.
 func (re *PCREgexp) FindSubmatch(b []byte) [][]byte {
 	indexes := re.match(b)
-	if indexes == nil || len(indexes) < 2 {
+	if len(indexes) < 2 {
 		return nil
 	}
 
@@ -461,7 +502,7 @@ func (re *PCREgexp) FindAllString(s string, n int) []string {
 
 	for n != 0 {
 		indexes := re.match(stringToBytesUnsafe(remaining))
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			break
 		}
 
@@ -529,7 +570,7 @@ func (re *PCREgexp) FindAllStringIndex(s string, n int) [][]int {
 
 	for n != 0 {
 		indexes := re.match(stringToBytesUnsafe(remaining))
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			break
 		}
 
@@ -567,7 +608,7 @@ func (re *PCREgexp) ReplaceAllFunc(src []byte, repl func([]byte) []byte) []byte 
 
 	for {
 		indexes := re.match(remaining)
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			b.Write(remaining[lastMatchEnd:])
 			break
 		}
@@ -634,7 +675,7 @@ func (re *PCREgexp) FindAll(b []byte, n int) [][]byte {
 
 	for n != 0 {
 		indexes := re.match(remaining)
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			break
 		}
 
@@ -671,7 +712,7 @@ func (re *PCREgexp) FindAllIndex(b []byte, n int) [][]int {
 
 	for n != 0 {
 		indexes := re.match(remaining)
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			break
 		}
 
@@ -720,7 +761,7 @@ func (re *PCREgexp) ReplaceAllStringFunc(src string, repl func(string) string) s
 
 	for {
 		indexes := re.match(stringToBytesUnsafe(remaining))
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			b.WriteString(remaining[lastMatchEnd:])
 			break
 		}
@@ -768,7 +809,7 @@ func (re *PCREgexp) FindAllStringSubmatchIndex(s string, n int) [][]int {
 
 	for n != 0 {
 		indexes := re.match(stringToBytesUnsafe(remaining))
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			break
 		}
 
@@ -846,7 +887,7 @@ func (re *PCREgexp) FindAllSubmatchIndex(b []byte, n int) [][]int {
 
 	for n != 0 {
 		indexes := re.match(remaining)
-		if indexes == nil || len(indexes) < 2 {
+		if len(indexes) < 2 {
 			break
 		}
 
