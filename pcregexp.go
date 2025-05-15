@@ -77,6 +77,10 @@ type PCREgexp struct {
 	matchData uintptr // cached match data
 	isJIT     bool    // whether pattern has been JIT compiled
 	jitStack  uintptr // pointer to JIT stack
+
+	// cache for last match
+	lastSubject []byte
+	lastResult  []int
 }
 
 // Compile creates a new PCREgexp from pattern.
@@ -212,6 +216,10 @@ func (re *PCREgexp) match(subject []byte) []int {
 		return nil
 	}
 
+	if re.lastSubject != nil && bytes.Equal(re.lastSubject, subject) {
+		return re.lastResult
+	}
+
 	md := re.saveMatchData()
 	if md == 0 {
 		return nil
@@ -234,16 +242,11 @@ func (re *PCREgexp) match(subject []byte) []int {
 		matchFunc = pcre2_jit_match
 	}
 
-	var ret int32
-
-	ret = matchFunc(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
-
-	// If JIT was used and failed, fall back to non-JIT match
-	if re.isJIT && ret <= 0 {
-		ret = pcre2_match(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
-	}
-
+	ret := matchFunc(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
 	if ret < 0 {
+		re.lastSubject = append(re.lastSubject[:0], subject...)
+		re.lastResult = nil
+
 		return nil
 	}
 
@@ -251,13 +254,21 @@ func (re *PCREgexp) match(subject []byte) []int {
 	reqLen := n * 2
 
 	if cap(re.buf) < reqLen {
-		re.buf = make([]int, reqLen)
+		newCap := reqLen * 2
+		if newCap < 20 { // start with a reasonable minimum size
+			newCap = 20
+		}
+
+		re.buf = make([]int, reqLen, newCap)
 	} else {
 		re.buf = re.buf[:reqLen]
 	}
 
 	ovector := pcre2_get_ovector_pointer(md)
 	if ovector == nil {
+		re.lastSubject = append(re.lastSubject[:0], subject...)
+		re.lastResult = nil
+
 		return nil
 	}
 
@@ -266,6 +277,9 @@ func (re *PCREgexp) match(subject []byte) []int {
 		ptr := (*uint64)(ptr(uintptr(ptr(ovector)) + uintptr(i)*size))
 		re.buf[i] = int(*ptr)
 	}
+
+	re.lastSubject = append(re.lastSubject[:0], subject...)
+	re.lastResult = append(re.lastResult[:0], re.buf...)
 
 	return re.buf
 }
