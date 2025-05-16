@@ -24,17 +24,17 @@ var (
 	defaultJITStackMaxSize   = DefaultJITStackMaxSize
 )
 
-// JITOPtion represents the JIT compilation options.
+// JITOption represents the JIT compilation options.
 // It is used to specify the level of JIT compilation to be performed.
 //
 // The default option is [JITComplete], which enables full JIT compilation.
 // The JIT compilation options are used to control the behavior of the JIT
 // compiler when compiling regular expressions. The options can be set using
 // the [SetJITOption] function.
-type JITOPtion uint32
+type JITOption uint32
 
 const (
-	JITNoJit JITOPtion = iota
+	JITNoJit JITOption = iota
 	JITComplete
 	JITPartialSoft
 	_
@@ -44,7 +44,7 @@ const (
 // SetJITOption sets the default JIT option used for JIT compilation.
 // The option parameter specifies the JIT option to be used.
 // The default option is [JITComplete], which enables full JIT compilation.
-func SetJITOption(option JITOPtion) {
+func SetJITOption(option JITOption) {
 	defaultJITOption = option
 }
 
