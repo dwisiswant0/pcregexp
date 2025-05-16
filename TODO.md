@@ -14,6 +14,7 @@
   * [ ] `ReplaceAllWithSubstitute` (`pcre2_substitute`)
   * [ ] `PatternInfo` (`pcre2_pattern_info`)
 * [ ] Add these functions:
+  * [ ] `CompileWithOptions` (`pcre2_compile_context_create`, `pcre2_compile_context_free`, and `pcre2_set_compile_extra_options`)
   * [ ] `GetErrorMessage` (`pcre2_get_error_message`)
 * [ ] Support these match context fields:
   * [ ] `OffsetLimit`
