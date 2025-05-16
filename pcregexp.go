@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"reflect"
 	"runtime"
 	"strings"
 	"unicode/utf8"
@@ -71,16 +70,13 @@ func init() {
 
 // PCREgexp is a compiled regular expression.
 type PCREgexp struct {
-	pattern   string  // original pattern
-	buf       []int   // cached match offsets
-	code      uintptr // pointer to compiled pcre2_code
-	matchData uintptr // cached match data
-	isJIT     bool    // whether pattern has been JIT compiled
-	jitStack  uintptr // pointer to JIT stack
-
-	// cache for last match
-	lastSubject []byte
-	lastResult  []int
+	pattern   string           // original pattern
+	buf       []int            // cached match offsets
+	code      uintptr          // pointer to compiled pcre2_code
+	matchData uintptr          // cached match data
+	isJIT     bool             // whether pattern has been JIT compiled
+	jitStack  uintptr          // pointer to JIT stack
+	cache     map[string][]int // cache for matches
 }
 
 // Compile creates a new PCREgexp from pattern.
@@ -88,17 +84,16 @@ type PCREgexp struct {
 // Note: an empty pattern is considered valid but will match nothing. :shrug:
 // In this case, calling [Close] is unnecessary.
 func Compile(pattern string) (*PCREgexp, error) {
-	var patPtr *uint8
 	var errcode int32
 	var errOffset uint64
 
+	re := &PCREgexp{code: 0, pattern: pattern, cache: make(map[string][]int)}
+
 	if len(pattern) == 0 {
-		return &PCREgexp{code: 0, pattern: pattern}, nil
+		return re, nil
 	}
 
-	strHeader := (*reflect.StringHeader)(unsafe.Pointer(&pattern))
-	patPtr = (*uint8)(unsafe.Pointer(strHeader.Data))
-	// patPtr = (*uint8)(unsafe.StringData(pattern))
+	patPtr := (*uint8)(unsafe.StringData(pattern))
 
 	// PCRE2_UTF = 0x00080000
 	// PCRE2_NO_UTF_CHECK = 0x40000000
@@ -106,8 +101,7 @@ func Compile(pattern string) (*PCREgexp, error) {
 	if code == 0 {
 		return nil, fmt.Errorf("pcre2_compile failed at offset %d, error code %d", errOffset, errcode)
 	}
-
-	re := &PCREgexp{code: code, pattern: pattern}
+	re.code = code
 
 	if defaultJITOption != JITNoJit {
 		res := pcre2_jit_compile(code, uint32(defaultJITOption))
@@ -194,6 +188,12 @@ func (re *PCREgexp) Close() {
 		pcre2_code_free(re.code)
 		re.code = 0
 	}
+
+	if re.cache != nil {
+		for k := range re.cache {
+			delete(re.cache, k)
+		}
+	}
 }
 
 // saveMatchData creates a new match data object if it doesn't exist yet.
@@ -216,8 +216,8 @@ func (re *PCREgexp) match(subject []byte) []int {
 		return nil
 	}
 
-	if re.lastSubject != nil && bytes.Equal(re.lastSubject, subject) {
-		return re.lastResult
+	if result, ok := re.cache[bytes2StringUnsafe(subject)]; ok {
+		return result
 	}
 
 	md := re.saveMatchData()
@@ -244,9 +244,7 @@ func (re *PCREgexp) match(subject []byte) []int {
 
 	ret := matchFunc(re.code, subjectPtr, uint64(len(subject)), 0, 0, md, matchCtxPtr)
 	if ret < 0 {
-		re.lastSubject = append(re.lastSubject[:0], subject...)
-		re.lastResult = nil
-
+		re.cache[bytes2StringUnsafe(subject)] = nil
 		return nil
 	}
 
@@ -266,9 +264,7 @@ func (re *PCREgexp) match(subject []byte) []int {
 
 	ovector := pcre2_get_ovector_pointer(md)
 	if ovector == nil {
-		re.lastSubject = append(re.lastSubject[:0], subject...)
-		re.lastResult = nil
-
+		re.cache[bytes2StringUnsafe(subject)] = nil
 		return nil
 	}
 
@@ -278,20 +274,21 @@ func (re *PCREgexp) match(subject []byte) []int {
 		re.buf[i] = int(*ptr)
 	}
 
-	re.lastSubject = append(re.lastSubject[:0], subject...)
-	re.lastResult = append(re.lastResult[:0], re.buf...)
+	result := make([]int, len(re.buf))
+	copy(result, re.buf)
+	re.cache[bytes2StringUnsafe(subject)] = result
 
 	return re.buf
 }
 
 // MatchString reports whether the Regexp matches the given string.
 func (re *PCREgexp) MatchString(s string) bool {
-	return re.match(stringToBytesUnsafe(s)) != nil
+	return re.match(string2BytesUnsafe(s)) != nil
 }
 
 // FindString returns the text of the leftmost match in s.
 func (re *PCREgexp) FindString(s string) string {
-	indexes := re.match(stringToBytesUnsafe(s))
+	indexes := re.match(string2BytesUnsafe(s))
 	if len(indexes) < 2 {
 		return ""
 	}
@@ -302,14 +299,14 @@ func (re *PCREgexp) FindString(s string) string {
 // FindStringIndex returns a two-element slice of integers defining the start
 // and end of the leftmost match in s.
 func (re *PCREgexp) FindStringIndex(s string) []int {
-	return re.match(stringToBytesUnsafe(s))
+	return re.match(string2BytesUnsafe(s))
 }
 
 // FindStringSubmatch returns a slice holding the text of the leftmost match and
 // its submatches. It uses the actual number of captured groups as returned by
 // PCRE2.
 func (re *PCREgexp) FindStringSubmatch(s string) []string {
-	indexes := re.match(stringToBytesUnsafe(s))
+	indexes := re.match(string2BytesUnsafe(s))
 	if len(indexes) < 2 {
 		return nil
 	}
@@ -345,7 +342,7 @@ func (re *PCREgexp) ReplaceAllString(src, repl string) string {
 
 	remaining := src
 	for {
-		indexes := re.match(stringToBytesUnsafe(remaining))
+		indexes := re.match(string2BytesUnsafe(remaining))
 		if len(indexes) < 2 {
 			b.WriteString(remaining)
 			break
@@ -487,7 +484,7 @@ func (re *PCREgexp) MatchReader(r io.RuneReader) bool {
 
 // ReplaceAll returns a copy of src, replacing matches of the regexp with repl.
 func (re *PCREgexp) ReplaceAll(src, repl []byte) []byte {
-	return stringToBytesUnsafe(re.ReplaceAllString(string(src), string(repl)))
+	return string2BytesUnsafe(re.ReplaceAllString(bytes2StringUnsafe(src), bytes2StringUnsafe(repl)))
 }
 
 // NumSubexp returns the number of parenthesized subexpressions in this regexp.
@@ -515,7 +512,7 @@ func (re *PCREgexp) FindAllString(s string, n int) []string {
 	remaining := s
 
 	for n != 0 {
-		indexes := re.match(stringToBytesUnsafe(remaining))
+		indexes := re.match(string2BytesUnsafe(remaining))
 		if len(indexes) < 2 {
 			break
 		}
@@ -583,7 +580,7 @@ func (re *PCREgexp) FindAllStringIndex(s string, n int) [][]int {
 	offset := 0
 
 	for n != 0 {
-		indexes := re.match(stringToBytesUnsafe(remaining))
+		indexes := re.match(string2BytesUnsafe(remaining))
 		if len(indexes) < 2 {
 			break
 		}
@@ -647,7 +644,7 @@ func (re *PCREgexp) ReplaceAllFunc(src []byte, repl func([]byte) []byte) []byte 
 		}
 	}
 
-	return stringToBytesUnsafe(b.String())
+	return string2BytesUnsafe(b.String())
 }
 
 // Split slices s into substrings separated by matches of the regexp.
@@ -774,7 +771,7 @@ func (re *PCREgexp) ReplaceAllStringFunc(src string, repl func(string) string) s
 	lastMatchEnd := 0
 
 	for {
-		indexes := re.match(stringToBytesUnsafe(remaining))
+		indexes := re.match(string2BytesUnsafe(remaining))
 		if len(indexes) < 2 {
 			b.WriteString(remaining[lastMatchEnd:])
 			break
@@ -806,7 +803,7 @@ func (re *PCREgexp) ReplaceAllStringFunc(src string, repl func(string) string) s
 // FindStringSubmatchIndex returns a slice holding the index pairs identifying
 // the leftmost match of the regexp in s and the matches of its subexpressions.
 func (re *PCREgexp) FindStringSubmatchIndex(s string) []int {
-	return re.match(stringToBytesUnsafe(s))
+	return re.match(string2BytesUnsafe(s))
 }
 
 // FindAllStringSubmatchIndex returns a slice of slices holding the index pairs
@@ -822,7 +819,7 @@ func (re *PCREgexp) FindAllStringSubmatchIndex(s string, n int) [][]int {
 	offset := 0
 
 	for n != 0 {
-		indexes := re.match(stringToBytesUnsafe(remaining))
+		indexes := re.match(string2BytesUnsafe(remaining))
 		if len(indexes) < 2 {
 			break
 		}
@@ -938,12 +935,12 @@ func (re *PCREgexp) FindAllSubmatchIndex(b []byte, n int) [][]int {
 // append, Expand replaces variables in the template with corresponding
 // matches drawn from src.
 func (re *PCREgexp) Expand(dst, template, src []byte, match []int) []byte {
-	return re.expand(dst, string(template), src, match, false)
+	return re.expand(dst, bytes2StringUnsafe(template), src, match, false)
 }
 
 // ExpandString is like Expand but the template and source are strings.
 func (re *PCREgexp) ExpandString(dst []byte, template, src string, match []int) []byte {
-	return re.expand(dst, template, stringToBytesUnsafe(src), match, true)
+	return re.expand(dst, template, string2BytesUnsafe(src), match, true)
 }
 
 // expand implements both Expand and ExpandString.
@@ -997,12 +994,12 @@ func (re *PCREgexp) Longest() {
 
 // MarshalText implements the encoding.TextMarshaler interface.
 func (re *PCREgexp) MarshalText() ([]byte, error) {
-	return stringToBytesUnsafe(re.String()), nil
+	return string2BytesUnsafe(re.String()), nil
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
 func (re *PCREgexp) UnmarshalText(text []byte) error {
-	r, err := Compile(string(text))
+	r, err := Compile(bytes2StringUnsafe(text))
 	if err != nil {
 		return err
 	}
