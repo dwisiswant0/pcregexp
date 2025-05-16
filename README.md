@@ -10,7 +10,7 @@
 
 ## Requirements
 
-* **go1.18** or later.
+* **go1.20** or later.
 * **PCRE2 10.x shared library** must be [installed](https://github.com/PCRE2Project/pcre2#quickstart) on your system.
 * Supported platforms:
   * [PCRE2](https://github.com/PCRE2Project/pcre2#platforms)
