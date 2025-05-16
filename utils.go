@@ -8,11 +8,25 @@ import (
 // ptr aliases [unsafe.Pointer].
 type ptr = unsafe.Pointer
 
-// stringToBytesUnsafe returns a byte slice header that points to the string's
+// string2ByteSlice returns a byte slice header that points to the string's
 // data. This conversion is safe only if the receiver does not modify the
 // returned slice.
-func stringToBytesUnsafe(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(&s))
+func string2BytesUnsafe(str string) []byte {
+	if str == "" {
+		return nil
+	}
+
+	return unsafe.Slice(unsafe.StringData(str), len(str))
+}
+
+// bytes2StringUnsafe converts a byte slice to a string. This conversion is
+// safe only if the receiver does not modify the returned string.
+func bytes2StringUnsafe(bs []byte) string {
+	if len(bs) == 0 {
+		return ""
+	}
+
+	return unsafe.String(unsafe.SliceData(bs), len(bs))
 }
 
 // NeedsPCRE checks if the pattern contains PCRE2-only features, based on
