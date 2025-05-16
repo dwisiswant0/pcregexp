@@ -8,88 +8,6 @@ import (
 	"github.com/dwisiswant0/pcregexp"
 )
 
-// needsPCRE checks if the pattern contains features that require PCRE.
-func needsPCRE(pattern string) bool {
-	lookarounds := []string{
-		"(?=", "(?!", // Positive and negative lookahead.
-		"(?<=", "(?<!", // Positive and negative lookbehind.
-	}
-
-	unsupportedTokens := []string{
-		`\X`,         // Unicode grapheme
-		`\h`,         // horizontal whitespace
-		`\H`,         // not horizontal whitespace
-		`\V`,         // not vertical whitespace
-		`\R`,         // line break
-		`\N`,         // not line break
-		`\Z`,         // end of string
-		`\G`,         // previous match end
-		`\K`,         // keep out
-		`\c`,         // control character escape (e.g. \cI)
-		`\e`,         // escape character
-		"(?>",        // atomic group
-		"(?|",        // branch reset group
-		"(?(DEFINE)", // define group
-		"(?(",        // conditional group (matches conditionals, but not non-capturing which is "(?:")
-		"(?#",        // comment
-		"(?R)",       // recursion
-	}
-
-	// Check for lookahead and lookbehind assertions.
-	for _, token := range lookarounds {
-		if strings.Contains(pattern, token) {
-			return true
-		}
-	}
-
-	// Check for unsupported tokens.
-	for _, token := range unsupportedTokens {
-		if strings.Contains(pattern, token) {
-			return true
-		}
-	}
-
-	// Check for backreferences using simple string matching.
-	groups := 0
-	escaped := false
-	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == '\\' {
-			escaped = !escaped
-			continue
-		}
-		if !escaped && pattern[i] == '(' {
-			// Skip non-capturing groups and named groups.
-			if i+2 < len(pattern) && pattern[i+1] == '?' {
-				if pattern[i+2] == ':' || pattern[i+2] == 'P' {
-					continue
-				}
-			}
-			groups++
-		}
-		escaped = false
-	}
-
-	// If we have any capturing groups, look for backreferences.
-	if groups > 0 {
-		escaped = false
-		for i := 0; i < len(pattern); i++ {
-			if pattern[i] == '\\' {
-				if !escaped && i+1 < len(pattern) {
-					next := pattern[i+1]
-					if next >= '1' && next <= '9' {
-						return true
-					}
-				}
-				escaped = !escaped
-			} else {
-				escaped = false
-			}
-		}
-	}
-
-	return false
-}
-
 func BenchmarkCompile(b *testing.B) {
 	patterns := []string{
 		`\b\w+@\w+\.\w+\b`,
@@ -140,7 +58,7 @@ func BenchmarkMatchString(b *testing.B) {
 		})
 
 		b.Run("stdlib/"+tt.name, func(b *testing.B) {
-			if needsPCRE(tt.pattern) {
+			if pcregexp.NeedsPCRE(tt.pattern) {
 				b.Skip("skipping test for pattern requiring PCRE")
 			}
 
@@ -177,7 +95,7 @@ func BenchmarkFind(b *testing.B) {
 		})
 
 		b.Run("stdlib/Find/"+tt.name, func(b *testing.B) {
-			if needsPCRE(tt.pattern) {
+			if pcregexp.NeedsPCRE(tt.pattern) {
 				b.Skip("skipping test for pattern requiring PCRE")
 			}
 
@@ -194,7 +112,7 @@ func BenchmarkFind(b *testing.B) {
 		})
 
 		b.Run("stdlib/FindString/"+tt.name, func(b *testing.B) {
-			if needsPCRE(tt.pattern) {
+			if pcregexp.NeedsPCRE(tt.pattern) {
 				b.Skip("skipping test for pattern requiring PCRE")
 			}
 
@@ -277,7 +195,7 @@ func BenchmarkFindAll(b *testing.B) {
 		})
 
 		b.Run("stdlib/FindAll/"+tt.name, func(b *testing.B) {
-			if needsPCRE(tt.pattern) {
+			if pcregexp.NeedsPCRE(tt.pattern) {
 				b.Skip("skipping test for pattern requiring PCRE")
 			}
 
@@ -295,7 +213,7 @@ func BenchmarkFindAll(b *testing.B) {
 		})
 
 		b.Run("stdlib/FindAllIndex/"+tt.name, func(b *testing.B) {
-			if needsPCRE(tt.pattern) {
+			if pcregexp.NeedsPCRE(tt.pattern) {
 				b.Skip("skipping test for pattern requiring PCRE")
 			}
 
@@ -332,7 +250,7 @@ func BenchmarkFindAllSubmatch(b *testing.B) {
 		})
 
 		b.Run("stdlib/FindAllSubmatch/"+tt.name, func(b *testing.B) {
-			if needsPCRE(tt.pattern) {
+			if pcregexp.NeedsPCRE(tt.pattern) {
 				b.Skip("skipping test for pattern requiring PCRE")
 			}
 
